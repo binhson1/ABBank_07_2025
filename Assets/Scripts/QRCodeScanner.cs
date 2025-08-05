@@ -19,7 +19,6 @@ public class QRCodeScanner : MonoBehaviour
     public TextMeshProUGUI tmpgui;
     public TMP_InputField manualInputField;
     public int scansPerSecond = 5;
-
     private WebCamTexture webcamTexture;
     private IBarcodeReader barcodeReader;
     private Dictionary<string, ExcelRow> guestDict = new Dictionary<string, ExcelRow>();
@@ -35,7 +34,7 @@ public class QRCodeScanner : MonoBehaviour
 
     void Start()
     {
-        // Activate second display
+
         if (Display.displays.Length > 1)
         {
             Display.displays[1].Activate();
@@ -74,14 +73,14 @@ public class QRCodeScanner : MonoBehaviour
                         standbyScreen.SetActive(false);
                         ProcessQRCode(result.Text.Trim());
                         scanned = true;
-                        tmpgui.text = $"✅ Đã quét ID: {result.Text.Trim()}";
+                        tmpgui.text = $"Đã quét ID: {result.Text.Trim()}";
                         logManager?.AddLog($"Đã quét QR thành công: {result.Text.Trim()}");
                     }
                 }
                 catch (Exception e)
                 {
                     Debug.LogWarning("Scan error: " + e.Message);
-                    tmpgui.text = "❌ Lỗi khi quét QR.";
+                    tmpgui.text = " Lỗi khi quét QR.";
                 }
 
                 if (scanned)
@@ -91,10 +90,10 @@ public class QRCodeScanner : MonoBehaviour
             }
             else
             {
-                tmpgui.text = "❌ Không tìm thấy camera.";
+                tmpgui.text = " Không tìm thấy camera.";
             }
 
-            yield return new WaitForSeconds(1f / scansPerSecond);
+            yield return new WaitForSeconds(1f);
         }
     }
 
@@ -108,11 +107,11 @@ public class QRCodeScanner : MonoBehaviour
             webcamTexture.Play();
             cameraPreview.rectTransform.sizeDelta = new Vector2(webcamTexture.width, webcamTexture.height);
             cameraPreview.enabled = true;
-            tmpgui.text = "🎥 Camera đã khởi động.";
+            tmpgui.text = " Camera đã khởi động.";
         }
         else
         {
-            tmpgui.text = "❌ Không tìm thấy thiết bị camera.";
+            tmpgui.text = " Không tìm thấy thiết bị camera.";
             Debug.LogError("No webcam found!");
         }
     }
@@ -142,7 +141,7 @@ public class QRCodeScanner : MonoBehaviour
             row++;
         }
 
-        tmpgui.text = $"📊 Đã tải dữ liệu từ Excel ({guestDict.Count} người).";
+        tmpgui.text = $"Đã tải dữ liệu từ Excel ({guestDict.Count} người).";
     }
 
     public void ManualCheckIn()
@@ -150,13 +149,13 @@ public class QRCodeScanner : MonoBehaviour
         string inputId = manualInputField.text.Trim();
         if (!string.IsNullOrEmpty(inputId))
         {
-            logManager?.AddLog($"⛳ Check-in thủ công: {inputId}");
-            tmpgui.text = $"📝 Check-in thủ công: {inputId}";
+            logManager?.AddLog($"Check-in thủ công: {inputId}");
+            tmpgui.text = $"Check-in thủ công: {inputId}";
             ProcessQRCode(inputId);
         }
         else
         {
-            tmpgui.text = "⚠️ Vui lòng nhập ID.";
+            tmpgui.text = " Vui lòng nhập ID.";
         }
     }
 
@@ -165,16 +164,16 @@ public class QRCodeScanner : MonoBehaviour
         if (!guestDict.ContainsKey(id))
         {
             Debug.LogWarning("ID không tồn tại: " + id);
-            tmpgui.text = $"❌ ID không tồn tại: {id}";
+            tmpgui.text = $" ID không tồn tại: {id}";
             ShowInfo(null);
-            logManager?.AddLog($"❌ Không tìm thấy ID: {id}");
+            logManager?.AddLog($" Không tìm thấy ID: {id}");
             return;
         }
 
         if (checkedIn.Contains(id))
         {
-            tmpgui.text = $"⚠️ Đã check-in trước đó: {id}";
-            logManager?.AddLog($"⚠️ Lặp lại ID đã check-in: {id}");
+            tmpgui.text = $" Đã check-in trước đó: {id}";
+            logManager?.AddLog($" Lặp lại ID đã check-in: {id}");
             return;
         }
 
@@ -186,8 +185,8 @@ public class QRCodeScanner : MonoBehaviour
 
         SaveExcelAsync();
         countText.text = $"Số người đã checkin: {checkedIn.Count}";
-        tmpgui.text = $"✅ Check-in thành công: {guest.Name}";
-        logManager?.AddLog($"✅ Check-in thành công: {guest.Name} - ID: {id}");
+        tmpgui.text = $"Check-in thành công: {guest.Name}";
+        logManager?.AddLog($"Check-in thành công: {guest.Name} - ID: {id}");
     }
 
     async void SaveExcelAsync()
