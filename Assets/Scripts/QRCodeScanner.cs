@@ -5,9 +5,10 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 using ZXing;
-using OfficeOpenXml;
 using System.Threading.Tasks;
 using TMPro;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
 
 public class QRCodeScanner : MonoBehaviour
 {
@@ -19,22 +20,25 @@ public class QRCodeScanner : MonoBehaviour
     public TextMeshProUGUI tmpgui;
     public TMP_InputField manualInputField;
     public int scansPerSecond = 5;
+
     private WebCamTexture webcamTexture;
     private IBarcodeReader barcodeReader;
+
     private Dictionary<string, ExcelRow> guestDict = new Dictionary<string, ExcelRow>();
     private HashSet<string> checkedIn = new HashSet<string>();
+
     private string dataPath;
-    private float scanTimer;
     private float standbyTimer;
     private float standbyTimeout = 60f;
-    private ExcelPackage excelPackage;
-    private ExcelWorksheet worksheet;
+
+    // NPOI objects
+    private IWorkbook workbook;
+    private ISheet worksheet;
 
     public LogManager logManager;
 
     void Start()
     {
-
         if (Display.displays.Length > 1)
         {
             Display.displays[1].Activate();
@@ -118,25 +122,32 @@ public class QRCodeScanner : MonoBehaviour
 
     void LoadExcel()
     {
-        var fileInfo = new FileInfo(dataPath);
-        excelPackage = new ExcelPackage(fileInfo);
-        worksheet = excelPackage.Workbook.Worksheets["DS Final"];
+        using (FileStream file = new FileStream(dataPath, FileMode.Open, FileAccess.Read))
+        {
+            workbook = new XSSFWorkbook(file);
+            worksheet = workbook.GetSheet("DS Final");
+        }
 
-        int row = 2;
+        guestDict.Clear();
+
+        int row = 1; // NPOI index bắt đầu từ 0, dữ liệu bạn ở hàng 2 => index = 1
         while (true)
         {
-            var id = worksheet.Cells[row, 2].Text;
+            IRow excelRow = worksheet.GetRow(row);
+            if (excelRow == null) break;
+
+            string id = excelRow.GetCell(1)?.ToString(); // Cột B => index 1
             if (string.IsNullOrEmpty(id)) break;
 
             guestDict[id] = new ExcelRow
             {
                 RowNumber = row,
                 ID = id,
-                Sex = worksheet.Cells[row, 4].Text,
-                Name = worksheet.Cells[row, 5].Text,
-                Unit = worksheet.Cells[row, 6].Text,
-                Title1 = worksheet.Cells[row, 7].Text,
-                Title2 = worksheet.Cells[row, 8].Text
+                Sex = excelRow.GetCell(3)?.ToString(),
+                Name = excelRow.GetCell(4)?.ToString(),
+                Unit = excelRow.GetCell(5)?.ToString(),
+                Title1 = excelRow.GetCell(6)?.ToString(),
+                Title2 = excelRow.GetCell(7)?.ToString()
             };
             row++;
         }
@@ -179,8 +190,14 @@ public class QRCodeScanner : MonoBehaviour
 
         ExcelRow guest = guestDict[id];
         ShowInfo(guest);
-        worksheet.Cells[guest.RowNumber, 12].Value = "Checked-in";
-        worksheet.Cells[guest.RowNumber, 13].Value = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+        IRow excelRow = worksheet.GetRow(guest.RowNumber);
+        if (excelRow.GetCell(11) == null) excelRow.CreateCell(11);
+        if (excelRow.GetCell(12) == null) excelRow.CreateCell(12);
+
+        excelRow.GetCell(11).SetCellValue("Checked-in"); // Cột L => index 11
+        excelRow.GetCell(12).SetCellValue(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")); // Cột M => index 12
+
         checkedIn.Add(id);
 
         SaveExcelAsync();
@@ -193,10 +210,9 @@ public class QRCodeScanner : MonoBehaviour
     {
         await Task.Run(() =>
         {
-            using (var stream = new MemoryStream())
+            using (FileStream file = new FileStream(dataPath, FileMode.Create, FileAccess.Write))
             {
-                excelPackage.SaveAs(stream);
-                File.WriteAllBytes(dataPath, stream.ToArray());
+                workbook.Write(file);
             }
         });
     }
