@@ -185,7 +185,8 @@ public class QRCodeScanner : MonoBehaviour
         {
             tmpgui.text = $" Đã check-in trước đó: {id}";
             logManager?.AddLog($" Lặp lại ID đã check-in: {id}");
-            return;
+            checkedIn.Remove(id);
+            // return;
         }
 
         ExcelRow guest = guestDict[id];
