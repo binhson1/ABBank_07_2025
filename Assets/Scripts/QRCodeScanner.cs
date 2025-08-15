@@ -14,7 +14,7 @@ public class QRCodeScanner : MonoBehaviour
 {
     public RawImage cameraPreview;
     public RenderTexture cameraTexture;
-    public TextMeshProUGUI nameText, sexText, title1Text, title2Text, unitText, countText;
+    public TextMeshProUGUI nameText, sexText, title1Text, title2Text, unitText, countText, tableText;
     public GameObject nameLabel, titleLabel;
     public GameObject standbyScreen;
     public TextMeshProUGUI tmpgui;
@@ -29,7 +29,7 @@ public class QRCodeScanner : MonoBehaviour
 
     private string dataPath;
     private float standbyTimer;
-    private float standbyTimeout = 60f;
+    public float standbyTimeout = 60f;
 
     // NPOI objects
     private IWorkbook workbook;
@@ -50,15 +50,72 @@ public class QRCodeScanner : MonoBehaviour
         LoadExcel();
         InitWebcam();
         barcodeReader = new BarcodeReader();
-        standbyScreen.SetActive(false);
 
+        standbyScreen.SetActive(false);
         StartCoroutine(ScanRoutine());
+
+        // Gắn sự kiện Enter cho input
+        manualInputField.onSubmit.AddListener(delegate { ManualCheckIn(); ExitStandby(); });
+    }
+
+    void Update()
+    {
+        // Tăng timer standby
+        standbyTimer += Time.deltaTime;
+
+        // Nếu quá timeout và chưa standby thì bật standby
+        if (standbyTimer >= standbyTimeout && !standbyScreen.activeSelf)
+        {
+            EnterStandby();
+        }
+
+        // Nếu đang standby và người dùng bấm phím thì thoát standby
+        // if (standbyScreen.activeSelf && Input.anyKeyDown)
+        // {
+        //     ExitStandby();
+        // }
+
+        // Ngoài ra, cho phép bấm Enter để nhập manual khi đang active input
+        // if (manualInputField.isFocused && Input.GetKeyDown(KeyCode.Return))
+        if (Input.GetKeyDown(KeyCode.Return))
+        {
+            ManualCheckIn();
+            ExitStandby();
+        }
+    }
+
+    void EnterStandby()
+    {
+        standbyScreen.SetActive(true);
+        // if (webcamTexture != null && webcamTexture.isPlaying)
+        // {
+        //     webcamTexture.Pause(); // Tạm dừng camera để tiết kiệm tài nguyên
+        // }
+        tmpgui.text = "Đang ở chế độ chờ...";
+    }
+
+    void ExitStandby()
+    {
+        standbyTimer = 0f;
+        standbyScreen.SetActive(false);
+        // if (webcamTexture != null && !webcamTexture.isPlaying)
+        // {
+        //     webcamTexture.Play();
+        // }
+        tmpgui.text = "Camera OK - Đang quét...";
     }
 
     IEnumerator ScanRoutine()
     {
         while (true)
         {
+            // Nếu standby thì bỏ qua vòng quét để tránh lag
+            // if (standbyScreen.activeSelf)
+            // {
+            //     yield return new WaitForSeconds(0.5f);
+            //     continue;
+            // }
+
             if (webcamTexture != null && webcamTexture.isPlaying)
             {
                 tmpgui.text = "Camera OK - Đang quét...";
@@ -73,9 +130,9 @@ public class QRCodeScanner : MonoBehaviour
                     var result = barcodeReader.Decode(data, width, height);
                     if (result != null)
                     {
-                        standbyTimer = 0f;
-                        standbyScreen.SetActive(false);
+                        standbyTimer = 0f; // reset timer khi có scan
                         ProcessQRCode(result.Text.Trim());
+                        standbyScreen.SetActive(false);
                         scanned = true;
                         tmpgui.text = $"Đã quét ID: {result.Text.Trim()}";
                         logManager?.AddLog($"Đã quét QR thành công: {result.Text.Trim()}");
@@ -101,6 +158,29 @@ public class QRCodeScanner : MonoBehaviour
         }
     }
 
+    public void ManualCheckIn()
+    {
+        string inputId = manualInputField.text.Trim();
+        // uppercase first letter
+        if (!string.IsNullOrEmpty(inputId))
+        {
+            inputId = char.ToUpper(inputId[0]) + inputId.Substring(1).ToLower();
+        }
+        if (!string.IsNullOrEmpty(inputId))
+        {
+            logManager?.AddLog($"Check-in thủ công: {inputId}");
+            tmpgui.text = $"Check-in thủ công: {inputId}";
+            ProcessQRCode(inputId);
+            manualInputField.text = ""; // Xóa input sau khi nhập
+        }
+        else
+        {
+            tmpgui.text = " Vui lòng nhập ID.";
+        }
+        standbyTimer = 0f; // reset standby
+    }
+
+
     void InitWebcam()
     {
         WebCamDevice[] devices = WebCamTexture.devices;
@@ -109,7 +189,7 @@ public class QRCodeScanner : MonoBehaviour
             webcamTexture = new WebCamTexture(devices[0].name, cameraTexture.width, cameraTexture.height);
             cameraPreview.texture = webcamTexture;
             webcamTexture.Play();
-            cameraPreview.rectTransform.sizeDelta = new Vector2(webcamTexture.width, webcamTexture.height);
+            // cameraPreview.rectTransform.sizeDelta = new Vector2(webcamTexture.width, webcamTexture.height);
             cameraPreview.enabled = true;
             tmpgui.text = " Camera đã khởi động.";
         }
@@ -147,7 +227,8 @@ public class QRCodeScanner : MonoBehaviour
                 Name = excelRow.GetCell(4)?.ToString(),
                 Unit = excelRow.GetCell(5)?.ToString(),
                 Title1 = excelRow.GetCell(6)?.ToString(),
-                Title2 = excelRow.GetCell(7)?.ToString()
+                Title2 = excelRow.GetCell(7)?.ToString(),
+                Table = excelRow.GetCell(11)?.ToString()
             };
             row++;
         }
@@ -155,28 +236,20 @@ public class QRCodeScanner : MonoBehaviour
         tmpgui.text = $"Đã tải dữ liệu từ Excel ({guestDict.Count} người).";
     }
 
-    public void ManualCheckIn()
-    {
-        string inputId = manualInputField.text.Trim();
-        if (!string.IsNullOrEmpty(inputId))
-        {
-            logManager?.AddLog($"Check-in thủ công: {inputId}");
-            tmpgui.text = $"Check-in thủ công: {inputId}";
-            ProcessQRCode(inputId);
-        }
-        else
-        {
-            tmpgui.text = " Vui lòng nhập ID.";
-        }
-    }
-
     void ProcessQRCode(string id)
     {
+        // if (!guestDict.ContainsKey(id))
+        if (string.IsNullOrEmpty(id))
+        {
+            Debug.LogWarning("ID rỗng hoặc null.");
+            tmpgui.text = " ID không hợp lệ.";
+            return;
+        }
         if (!guestDict.ContainsKey(id))
         {
             Debug.LogWarning("ID không tồn tại: " + id);
             tmpgui.text = $" ID không tồn tại: {id}";
-            ShowInfo(null);
+            // ShowInfo(null);
             logManager?.AddLog($" Không tìm thấy ID: {id}");
             return;
         }
@@ -193,11 +266,11 @@ public class QRCodeScanner : MonoBehaviour
         ShowInfo(guest);
 
         IRow excelRow = worksheet.GetRow(guest.RowNumber);
-        if (excelRow.GetCell(11) == null) excelRow.CreateCell(11);
-        if (excelRow.GetCell(12) == null) excelRow.CreateCell(12);
+        if (excelRow.GetCell(15) == null) excelRow.CreateCell(15);
+        // if (excelRow.GetCell(12) == null) excelRow.CreateCell(12);
 
-        excelRow.GetCell(11).SetCellValue("Checked-in"); // Cột L => index 11
-        excelRow.GetCell(12).SetCellValue(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")); // Cột M => index 12
+        // excelRow.GetCell(11).SetCellValue("Checked-in"); // Cột L => index 11
+        excelRow.GetCell(15).SetCellValue(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")); // Cột M => index 12
 
         checkedIn.Add(id);
 
@@ -223,13 +296,15 @@ public class QRCodeScanner : MonoBehaviour
         if (guest == null)
         {
             nameText.text = "";
-            sexText.text = title1Text.text = title2Text.text = unitText.text = "";
+            sexText.text = title1Text.text = title2Text.text = unitText.text = tableText.text = "";
         }
         else
         {
             nameText.text = guest.Name;
             sexText.text = guest.Sex;
             title1Text.text = guest.Title1;
+            // tableText.text = "Bàn số: " + guest.Table;
+            tableText.text = string.IsNullOrEmpty(guest.Table) ? "" : "Bàn số: " + guest.Table;
             title2Text.text = guest.Title2;
             unitText.text = guest.Unit;
         }
@@ -247,6 +322,6 @@ public class QRCodeScanner : MonoBehaviour
     public class ExcelRow
     {
         public int RowNumber;
-        public string ID, Sex, Name, Unit, Title1, Title2;
+        public string ID, Sex, Name, Unit, Title1, Title2, Table;
     }
 }
