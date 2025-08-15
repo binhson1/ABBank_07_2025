@@ -15,6 +15,7 @@ public class QRCodeScanner : MonoBehaviour
     public RawImage cameraPreview;
     public RenderTexture cameraTexture;
     public TextMeshProUGUI nameText, sexText, title1Text, title2Text, unitText, countText, tableText;
+    public GameObject namePanel, titlePanel, unitPanel, tablePanel;
     public GameObject nameLabel, titleLabel;
     public GameObject standbyScreen;
     public TextMeshProUGUI tmpgui;
@@ -29,13 +30,17 @@ public class QRCodeScanner : MonoBehaviour
 
     private string dataPath;
     private float standbyTimer;
+    public AudioClip qrSound;
+    public AudioSource audioSource;
     public float standbyTimeout = 60f;
+    public float fadeDuration = 1f; // Thời gian fade-in chữ
 
     // NPOI objects
     private IWorkbook workbook;
     private ISheet worksheet;
 
     public LogManager logManager;
+    // private Animator nameAnimator, titleAnimator, unitAnimator, tableAnimator;
 
     void Start()
     {
@@ -56,6 +61,10 @@ public class QRCodeScanner : MonoBehaviour
 
         // Gắn sự kiện Enter cho input
         manualInputField.onSubmit.AddListener(delegate { ManualCheckIn(); ExitStandby(); });
+        // nameAnimator = namePanel.GetComponent<Animator>();
+        // titleAnimator = titlePanel.GetComponent<Animator>();
+        // unitAnimator = unitPanel.GetComponent<Animator>();
+        // tableAnimator = tablePanel.GetComponent<Animator>();
     }
 
     void Update()
@@ -91,7 +100,7 @@ public class QRCodeScanner : MonoBehaviour
         // {
         //     webcamTexture.Pause(); // Tạm dừng camera để tiết kiệm tài nguyên
         // }
-        tmpgui.text = "Đang ở chế độ chờ...";
+        // tmpgui.text = "Đang ở chế độ chờ...";
     }
 
     void ExitStandby()
@@ -118,7 +127,7 @@ public class QRCodeScanner : MonoBehaviour
 
             if (webcamTexture != null && webcamTexture.isPlaying)
             {
-                tmpgui.text = "Camera OK - Đang quét...";
+                // tmpgui.text = "Camera OK - Đang quét...";
                 bool scanned = false;
 
                 try
@@ -134,7 +143,7 @@ public class QRCodeScanner : MonoBehaviour
                         ProcessQRCode(result.Text.Trim());
                         standbyScreen.SetActive(false);
                         scanned = true;
-                        tmpgui.text = $"Đã quét ID: {result.Text.Trim()}";
+                        // tmpgui.text = $"Đã quét ID: {result.Text.Trim()}";
                         logManager?.AddLog($"Đã quét QR thành công: {result.Text.Trim()}");
                     }
                 }
@@ -175,7 +184,7 @@ public class QRCodeScanner : MonoBehaviour
         }
         else
         {
-            tmpgui.text = " Vui lòng nhập ID.";
+            // tmpgui.text = " Vui lòng nhập ID.";
         }
         standbyTimer = 0f; // reset standby
     }
@@ -238,21 +247,19 @@ public class QRCodeScanner : MonoBehaviour
 
     void ProcessQRCode(string id)
     {
-        // if (!guestDict.ContainsKey(id))
         if (string.IsNullOrEmpty(id))
         {
-            Debug.LogWarning("ID rỗng hoặc null.");
             tmpgui.text = " ID không hợp lệ.";
             return;
         }
         if (!guestDict.ContainsKey(id))
         {
-            Debug.LogWarning("ID không tồn tại: " + id);
             tmpgui.text = $" ID không tồn tại: {id}";
-            // ShowInfo(null);
             logManager?.AddLog($" Không tìm thấy ID: {id}");
             return;
         }
+        ExcelRow guest = guestDict[id];
+        IRow excelRow = worksheet.GetRow(guest.RowNumber);
 
         if (checkedIn.Contains(id))
         {
@@ -261,16 +268,15 @@ public class QRCodeScanner : MonoBehaviour
             checkedIn.Remove(id);
             // return;
         }
+        else
+        {
+            if (excelRow.GetCell(15) == null) excelRow.CreateCell(15);
+            excelRow.GetCell(15).SetCellValue(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+        }
 
-        ExcelRow guest = guestDict[id];
         ShowInfo(guest);
 
-        IRow excelRow = worksheet.GetRow(guest.RowNumber);
-        if (excelRow.GetCell(15) == null) excelRow.CreateCell(15);
-        // if (excelRow.GetCell(12) == null) excelRow.CreateCell(12);
 
-        // excelRow.GetCell(11).SetCellValue("Checked-in"); // Cột L => index 11
-        excelRow.GetCell(15).SetCellValue(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")); // Cột M => index 12
 
         checkedIn.Add(id);
 
@@ -278,8 +284,72 @@ public class QRCodeScanner : MonoBehaviour
         countText.text = $"Số người đã checkin: {checkedIn.Count}";
         tmpgui.text = $"Check-in thành công: {guest.Name}";
         logManager?.AddLog($"Check-in thành công: {guest.Name} - ID: {id}");
+
+        // Gọi hiệu ứng
+        PlayScanEffect();
+    }
+    void PlayScanEffect()
+    {
+        // Phát âm thanh
+        if (audioSource != null && qrSound != null)
+        {
+            audioSource.PlayOneShot(qrSound);
+        }
+
+        // Fade-in text thông tin khách
+        // StartCoroutine(FadeInText(nameText));
+        // StartCoroutine(FadeInText(sexText));
+        // StartCoroutine(FadeInText(title1Text));
+        // StartCoroutine(FadeInText(title2Text));
+        // StartCoroutine(FadeInText(unitText));
+        // StartCoroutine(FadeInText(tableText));
+        // zoom in text panels
+        StartCoroutine(ZoomInTextPanel(namePanel));
+        StartCoroutine(ZoomInTextPanel(titlePanel));
+        StartCoroutine(ZoomInTextPanel(unitPanel));
+        StartCoroutine(ZoomInTextPanel(tablePanel));
+        // get animator components and play zoom in animation
+
+        // nameAnimator.CrossFade("NameAnim", 0.1f);
+        // titleAnimator.CrossFade("TitleAnim", 0.1f);
+        // unitAnimator.CrossFade("UnitAnim", 0.1f);
+        // tableAnimator.CrossFade("TableAnim", 0.1f);
     }
 
+    IEnumerator ZoomInTextPanel(GameObject panel)
+    {
+        if (panel == null) yield break;
+
+        Vector3 originalScale = panel.transform.localScale;
+        panel.transform.localScale = Vector3.zero;
+
+        float elapsed = 0f;
+        while (elapsed < fadeDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / fadeDuration);
+            panel.transform.localScale = Vector3.Lerp(Vector3.zero, originalScale, t);
+            yield return null;
+        }
+    }
+
+    // IEnumerator FadeInText(TextMeshProUGUI tmp)
+    // {
+    //     if (tmp == null) yield break;
+
+    //     Color c = tmp.color;
+    //     c.a = 0;
+    //     tmp.color = c;
+
+    //     float elapsed = 0f;
+    //     while (elapsed < fadeDuration)
+    //     {
+    //         elapsed += Time.deltaTime;
+    //         c.a = Mathf.Clamp01(elapsed / fadeDuration);
+    //         tmp.color = c;
+    //         yield return null;
+    //     }
+    // }
     async void SaveExcelAsync()
     {
         await Task.Run(() =>
