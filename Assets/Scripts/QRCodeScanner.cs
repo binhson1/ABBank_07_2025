@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using TMPro;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
-
+using System.Text; // nhớ thêm using này ở đầu file
 public class QRCodeScanner : MonoBehaviour
 {
     public RawImage cameraPreview;
@@ -208,6 +208,11 @@ public class QRCodeScanner : MonoBehaviour
             Debug.LogError("No webcam found!");
         }
     }
+    string NormalizeText(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return input;
+        return input.Normalize(NormalizationForm.FormC);
+    }
 
     void LoadExcel()
     {
@@ -218,6 +223,7 @@ public class QRCodeScanner : MonoBehaviour
         }
 
         guestDict.Clear();
+        checkedIn.Clear(); // reset lại
 
         int row = 1; // NPOI index bắt đầu từ 0, dữ liệu bạn ở hàng 2 => index = 1
         while (true)
@@ -228,21 +234,31 @@ public class QRCodeScanner : MonoBehaviour
             string id = excelRow.GetCell(1)?.ToString(); // Cột B => index 1
             if (string.IsNullOrEmpty(id)) break;
 
-            guestDict[id] = new ExcelRow
+            ExcelRow guest = new ExcelRow
             {
                 RowNumber = row,
-                ID = id,
-                Sex = excelRow.GetCell(3)?.ToString(),
-                Name = excelRow.GetCell(4)?.ToString(),
-                Unit = excelRow.GetCell(5)?.ToString(),
-                Title1 = excelRow.GetCell(6)?.ToString(),
-                Title2 = excelRow.GetCell(7)?.ToString(),
-                Table = excelRow.GetCell(11)?.ToString()
+                ID = NormalizeText(id),
+                Sex = NormalizeText(excelRow.GetCell(3)?.ToString()),
+                Name = NormalizeText(excelRow.GetCell(4)?.ToString()),
+                Unit = NormalizeText(excelRow.GetCell(5)?.ToString()),
+                Title1 = NormalizeText(excelRow.GetCell(6)?.ToString()),
+                Title2 = NormalizeText(excelRow.GetCell(7)?.ToString()),
+                Table = NormalizeText(excelRow.GetCell(11)?.ToString())
             };
+
+            guestDict[id] = guest;
+
+            // Nếu cột 16 (index = 15) đã có dữ liệu thì thêm vào checkedIn
+            string checkinTime = excelRow.GetCell(15)?.ToString();
+            if (!string.IsNullOrEmpty(checkinTime))
+            {
+                checkedIn.Add(id);
+            }
+
             row++;
         }
 
-        tmpgui.text = $"Đã tải dữ liệu từ Excel ({guestDict.Count} người).";
+        tmpgui.text = $"Đã tải dữ liệu từ Excel ({guestDict.Count} người, đã checkin: {checkedIn.Count}).";
     }
 
     void ProcessQRCode(string id)
@@ -261,22 +277,21 @@ public class QRCodeScanner : MonoBehaviour
         ExcelRow guest = guestDict[id];
         IRow excelRow = worksheet.GetRow(guest.RowNumber);
 
+        // Nếu đã checkin trước đó (dựa trên Excel hoặc checkedIn)
         if (checkedIn.Contains(id))
         {
             tmpgui.text = $" Đã check-in trước đó: {id}";
-            logManager?.AddLog($" Lặp lại ID đã check-in: {id}");
-            checkedIn.Remove(id);
-            // return;
+            logManager?.AddLog($"Lặp lại ID đã check-in: {id}");
+            ShowInfo(guest);
+            PlayScanEffect();
+            return; // ❌ Không ghi đè
         }
-        else
-        {
-            if (excelRow.GetCell(15) == null) excelRow.CreateCell(15);
-            excelRow.GetCell(15).SetCellValue(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
-        }
+
+        // Nếu chưa checkin thì ghi thời gian
+        if (excelRow.GetCell(15) == null) excelRow.CreateCell(15);
+        excelRow.GetCell(15).SetCellValue(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
 
         ShowInfo(guest);
-
-
 
         checkedIn.Add(id);
 
@@ -288,6 +303,7 @@ public class QRCodeScanner : MonoBehaviour
         // Gọi hiệu ứng
         PlayScanEffect();
     }
+
     void PlayScanEffect()
     {
         // Phát âm thanh
